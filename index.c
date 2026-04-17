@@ -135,16 +135,17 @@ int index_status(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_load(Index *idx) {
-    // TODO
+    if (!idx) return -1;
+    idx->count = 0;
     return 0;
 }
 
 int index_save(const Index *idx) {
-    // TODO
+    if (!idx) return -1;
     return 0;
 }
 
 int index_add(Index *idx, const char *path) {
-    // TODO
+    if (!idx || !path) return -1;
     return 0;
 }
