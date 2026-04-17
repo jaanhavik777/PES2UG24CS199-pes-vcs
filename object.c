@@ -116,11 +116,21 @@ int object_write(ObjectType type, const void *data, size_t len,
     ObjectID id;
     compute_hash(full_obj, full_len, &id);
 
-    *id_out = id;
+    // ✅ NEW: deduplication
+    if (object_exists(&id)) {
+        *id_out = id;
+        free(full_obj);
+        return 0;
+    }
 
-    // TODO: check if object exists
+    // ✅ NEW: generate object path
+    char final_path[512];
+    object_path(&id, final_path, sizeof(final_path));
+
+    // TODO: create directory if needed
     // TODO: write object to disk
 
+    *id_out = id;
     free(full_obj);
     return 0;
 }
