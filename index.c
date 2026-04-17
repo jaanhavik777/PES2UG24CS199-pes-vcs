@@ -148,12 +148,10 @@ int index_load(Index *idx) {
 
         char hash_hex[HASH_HEX_SIZE + 1];
 
-        if (sscanf(line, "%o %s %ld %zu %s",
+        if (sscanf(line, "%o %s %s",
                    &e->mode,
                    hash_hex,
-                   &e->mtime,
-                   &e->size,
-                   e->path) != 5) {
+                   e->path) != 3) {
             continue;
         }
 
@@ -177,11 +175,9 @@ int index_save(const Index *idx) {
         char hex[HASH_HEX_SIZE + 1];
         hash_to_hex(&e->hash, hex);
 
-        fprintf(f, "%o %s %ld %zu %s\n",
+        fprintf(f, "%o %s %s\n",
                 e->mode,
                 hex,
-                e->mtime,
-                e->size,
                 e->path);
     }
 
@@ -195,5 +191,47 @@ int index_save(const Index *idx) {
 
 int index_add(Index *idx, const char *path) {
     if (!idx || !path) return -1;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    void *data = malloc(size);
+    if (!data) {
+        fclose(f);
+        return -1;
+    }
+
+    fread(data, 1, size, f);
+    fclose(f);
+
+    ObjectID id;
+    if (object_write(OBJ_BLOB, data, size, &id) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    IndexEntry *e = NULL;
+
+    for (int i = 0; i < idx->count; i++) {
+        if (strcmp(idx->entries[i].path, path) == 0) {
+            e = &idx->entries[i];
+            break;
+        }
+    }
+
+    if (!e) {
+        e = &idx->entries[idx->count++];
+    }
+
+    e->mode = 0100644;  // standard file mode
+    strcpy(e->path, path);
+    memcpy(&e->hash, &id, sizeof(ObjectID));
+
     return 0;
 }
