@@ -15,6 +15,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include "index.h"
 
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
@@ -86,49 +87,6 @@ static int compare_tree_entries(const void *a, const void *b) {
 // Serialize a Tree struct into binary format for storage.
 // Caller must free(*data_out).
 // Returns 0 on success, -1 on error.
-int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
-    // Estimate max size: (6 bytes mode + 1 byte space + 256 bytes name + 1 byte null + 32 bytes hash) per entry
-    size_t max_size = tree->count * 296; 
-    uint8_t *buffer = malloc(max_size);
-    if (!buffer) return -1;
-
-    // Create a mutable copy to sort entries (Git requirement)
-    Tree sorted_tree = *tree;
-    qsort(sorted_tree.entries, sorted_tree.count, sizeof(TreeEntry), compare_tree_entries);
-
-    size_t offset = 0;
-    for (int i = 0; i < sorted_tree.count; i++) {
-        const TreeEntry *entry = &sorted_tree.entries[i];
-        
-        // Write mode and name (%o writes octal correctly for Git standards)
-        int written = sprintf((char *)buffer + offset, "%o %s", entry->mode, entry->name);
-        offset += written + 1; // +1 to step over the null terminator written by sprintf
-        
-        // Write binary hash
-        memcpy(buffer + offset, entry->hash.hash, HASH_SIZE);
-        offset += HASH_SIZE;
-    }
-
-    *data_out = buffer;
-    *len_out = offset;
-    return 0;
-}
-
-// ─── TODO: Implement these ──────────────────────────────────────────────────
-
-// Build a tree hierarchy from the current index and write all tree
-// objects to the object store.
-//
-// HINTS - Useful functions and concepts for this phase:
-//   - index_load      : load the staged files into memory
-//   - strchr          : find the first '/' in a path to separate directories from files
-//   - strncmp         : compare prefixes to group files belonging to the same subdirectory
-//   - Recursion       : you will likely want to create a recursive helper function 
-//                       (e.g., `write_tree_level(entries, count, depth)`) to handle nested dirs.
-//   - tree_serialize  : convert your populated Tree struct into a binary buffer
-//   - object_write    : save that binary buffer to the store as OBJ_TREE
-//
-// Returns 0 on success, -1 on error.
 int tree_from_index(const Index *index, ObjectID *tree_id_out) {
     if (!index || index->count == 0) {
         return -1;
@@ -144,21 +102,20 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
         const char *slash = strchr(path, '/');
 
         if (!slash) {
-            // file in root
+            // root file
             tree_add_entry(&tree,
                            path,
                            entry->mode,
-                           &entry->oid,
+                           &entry->hash,
                            OBJ_BLOB);
         } else {
-            // subdirectory case
             size_t dir_len = slash - path;
 
             char dirname[256];
             strncpy(dirname, path, dir_len);
             dirname[dir_len] = '\0';
 
-            // ✅ FIX: skip duplicate directory processing
+            // skip duplicate directory processing
             int already_done = 0;
             for (size_t k = 0; k < i; k++) {
                 if (strncmp(index->entries[k].path, dirname, dir_len) == 0 &&
@@ -169,8 +126,19 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
             }
             if (already_done) continue;
 
-            // create temporary index for subtree
-            Index sub_index = {0};
+            // count entries in this directory
+            size_t count = 0;
+            for (size_t j = 0; j < index->count; j++) {
+                const char *p = index->entries[j].path;
+                if (strncmp(p, dirname, dir_len) == 0 &&
+                    p[dir_len] == '/') {
+                    count++;
+                }
+            }
+
+            // build subtree index manually (SAFE)
+            Index sub_index;
+            sub_index.count = 0;
 
             for (size_t j = 0; j < index->count; j++) {
                 const IndexEntry *e = &index->entries[j];
@@ -178,31 +146,40 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
                 if (strncmp(e->path, dirname, dir_len) == 0 &&
                     e->path[dir_len] == '/') {
 
-                    IndexEntry sub_entry = *e;
-                    sub_entry.path = e->path + dir_len + 1;
+                    IndexEntry *sub = &sub_index.entries[sub_index.count++];
 
-                    sub_index.entries = realloc(sub_index.entries,
-                        (sub_index.count + 1) * sizeof(IndexEntry));
-                    sub_index.entries[sub_index.count++] = sub_entry;
+                    sub->mode = e->mode;
+                    memcpy(&sub->hash, &e->hash, sizeof(ObjectID));
+                    strcpy(sub->path, e->path + dir_len + 1);
                 }
             }
 
             ObjectID subtree_id;
-            tree_from_index(&sub_index, &subtree_id);
+            if (tree_from_index(&sub_index, &subtree_id) != 0) {
+                free(sub_index.entries);
+                return -1;
+            }
 
             tree_add_entry(&tree,
                            dirname,
                            040000,
                            &subtree_id,
                            OBJ_TREE);
-
-            free(sub_index.entries);
         }
     }
 
-    // TODO: serialize tree
-    // TODO: write tree using object_write
+    void *buf = NULL;
+    size_t len = 0;
 
-    (void)tree_id_out;
+    if (tree_serialize(&tree, &buf, &len) != 0) {
+        return -1;
+    }
+
+    if (object_write(OBJ_TREE, buf, len, tree_id_out) != 0) {
+        free(buf);
+        return -1;
+    }
+
+    free(buf);
     return 0;
 }
