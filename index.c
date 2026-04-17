@@ -139,11 +139,26 @@ int index_load(Index *idx) {
     idx->count = 0;
 
     FILE *f = fopen(INDEX_FILE, "r");
-    if (!f) return 0;  // empty index if not exists
+    if (!f) return 0;
 
     char line[512];
+
     while (fgets(line, sizeof(line), f)) {
-        // TODO: parse line
+        IndexEntry *e = &idx->entries[idx->count];
+
+        char hash_hex[HASH_HEX_SIZE + 1];
+
+        if (sscanf(line, "%o %s %ld %zu %s",
+                   &e->mode,
+                   hash_hex,
+                   &e->mtime,
+                   &e->size,
+                   e->path) != 5) {
+            continue;
+        }
+
+        hex_to_hash(hash_hex, &e->hash);
+        idx->count++;
     }
 
     fclose(f);
