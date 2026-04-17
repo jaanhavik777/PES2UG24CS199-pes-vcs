@@ -16,6 +16,7 @@
 // TODO functions:     index_load, index_save, index_add
 
 #include "index.h"
+// #include "object.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,8 +206,10 @@ int index_add(Index *idx, const char *path) {
         return -1;
     }
 
-    fread(data, 1, size, f);
+    if (fread(data, 1, size, f) != (size_t)size) {
+    free(data);
     fclose(f);
+    return -1;
 
     ObjectID id;
     if (object_write(OBJ_BLOB, data, size, &id) != 0) {
