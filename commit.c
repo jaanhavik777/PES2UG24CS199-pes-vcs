@@ -205,11 +205,31 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     hash_to_hex(&tree_id, tree_hex);
 
     char buf[1024];
-    int len = snprintf(buf, sizeof(buf),
+    int len;
+
+    FILE *f = fopen(".pes/HEAD", "r");
+    char parent_hex[HASH_HEX_SIZE + 1];
+    int has_parent = 0;
+
+    if (f) {
+        if (fgets(parent_hex, sizeof(parent_hex), f)) {
+            parent_hex[strcspn(parent_hex, "\n")] = '\0';
+            has_parent = 1;
+        }
+        fclose(f);
+    }
+
+    if (has_parent) {
+        len = snprintf(buf, sizeof(buf),
+                       "tree %s\nparent %s\n\n%s\n",
+                       tree_hex, parent_hex, message);
+    } else {
+        len = snprintf(buf, sizeof(buf),
                        "tree %s\n\n%s\n",
                        tree_hex, message);
+    }
 
-    (void)len; // suppress unused warning for now
+    (void)len;
 
     return 0;
 }
