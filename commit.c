@@ -201,5 +201,15 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         return -1;
     }
 
+    char tree_hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&tree_id, tree_hex);
+
+    char buf[1024];
+    int len = snprintf(buf, sizeof(buf),
+                       "tree %s\n\n%s\n",
+                       tree_hex, message);
+
+    (void)len; // suppress unused warning for now
+
     return 0;
 }
