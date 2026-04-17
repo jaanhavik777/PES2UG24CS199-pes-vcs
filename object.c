@@ -116,22 +116,51 @@ int object_write(ObjectType type, const void *data, size_t len,
     ObjectID id;
     compute_hash(full_obj, full_len, &id);
 
-    // ✅ NEW: deduplication
     if (object_exists(&id)) {
         *id_out = id;
         free(full_obj);
         return 0;
     }
 
-    // ✅ NEW: generate object path
     char final_path[512];
     object_path(&id, final_path, sizeof(final_path));
 
-    // TODO: create directory if needed
-    // TODO: write object to disk
+    // ✅ NEW: create shard directory
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&id, hex);
+
+    char shard_dir[512];
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+    mkdir(shard_dir, 0755);
+
+    // ✅ NEW: temp file path
+    char tmp_path[520];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", final_path);
+
+    // ✅ NEW: write object
+    int fd = open(tmp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    if (write(fd, full_obj, full_len) != (ssize_t)full_len) {
+        close(fd);
+        unlink(tmp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    free(full_obj);
+    close(fd);
+
+    // ✅ NEW: atomic rename
+    if (rename(tmp_path, final_path) != 0) {
+        unlink(tmp_path);
+        return -1;
+    }
 
     *id_out = id;
-    free(full_obj);
     return 0;
 }
 
