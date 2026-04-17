@@ -134,35 +134,74 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
         return -1;
     }
 
+    Tree tree;
+    tree_init(&tree);
+
     for (size_t i = 0; i < index->count; i++) {
         const IndexEntry *entry = &index->entries[i];
         const char *path = entry->path;
 
-        // Step 1: check if path contains '/'
         const char *slash = strchr(path, '/');
 
         if (!slash) {
-            // file in root directory
-            const char *filename = path;
-
-            // TODO: add file entry to root tree
+            // file in root
+            tree_add_entry(&tree,
+                           path,
+                           entry->mode,
+                           &entry->oid,
+                           OBJ_BLOB);
         } else {
-            // file inside subdirectory
+            // subdirectory case
             size_t dir_len = slash - path;
 
             char dirname[256];
             strncpy(dirname, path, dir_len);
             dirname[dir_len] = '\0';
 
-            const char *remaining = slash + 1;
+            // ✅ FIX: skip duplicate directory processing
+            int already_done = 0;
+            for (size_t k = 0; k < i; k++) {
+                if (strncmp(index->entries[k].path, dirname, dir_len) == 0 &&
+                    index->entries[k].path[dir_len] == '/') {
+                    already_done = 1;
+                    break;
+                }
+            }
+            if (already_done) continue;
 
-            // TODO: group entries under dirname
-            // TODO: prepare for subtree creation
+            // create temporary index for subtree
+            Index sub_index = {0};
+
+            for (size_t j = 0; j < index->count; j++) {
+                const IndexEntry *e = &index->entries[j];
+
+                if (strncmp(e->path, dirname, dir_len) == 0 &&
+                    e->path[dir_len] == '/') {
+
+                    IndexEntry sub_entry = *e;
+                    sub_entry.path = e->path + dir_len + 1;
+
+                    sub_index.entries = realloc(sub_index.entries,
+                        (sub_index.count + 1) * sizeof(IndexEntry));
+                    sub_index.entries[sub_index.count++] = sub_entry;
+                }
+            }
+
+            ObjectID subtree_id;
+            tree_from_index(&sub_index, &subtree_id);
+
+            tree_add_entry(&tree,
+                           dirname,
+                           040000,
+                           &subtree_id,
+                           OBJ_TREE);
+
+            free(sub_index.entries);
         }
     }
 
-    // TODO: build tree structures
-    // TODO: serialize and write root tree
+    // TODO: serialize tree
+    // TODO: write tree using object_write
 
     (void)tree_id_out;
     return 0;
