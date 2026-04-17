@@ -137,6 +137,16 @@ int index_status(const Index *index) {
 int index_load(Index *idx) {
     if (!idx) return -1;
     idx->count = 0;
+
+    FILE *f = fopen(INDEX_FILE, "r");
+    if (!f) return 0;  // empty index if not exists
+
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+        // TODO: parse line
+    }
+
+    fclose(f);
     return 0;
 }
 
