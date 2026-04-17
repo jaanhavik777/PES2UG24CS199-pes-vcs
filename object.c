@@ -103,11 +103,9 @@ int object_write(ObjectType type, const void *data, size_t len,
         default: return -1;
     }
 
-    // Step 1: build header (type + size)
     char header[64];
     int hdr_len = snprintf(header, sizeof(header), "%s %zu", type_str, len) + 1;
 
-    // Step 2: allocate buffer for full object
     size_t full_len = hdr_len + len;
     uint8_t *full_obj = malloc(full_len);
     if (!full_obj) return -1;
@@ -115,9 +113,13 @@ int object_write(ObjectType type, const void *data, size_t len,
     memcpy(full_obj, header, hdr_len);
     memcpy(full_obj + hdr_len, data, len);
 
-    // TODO: compute hash
-    // TODO: store object
-    // TODO: set id_out
+    ObjectID id;
+    compute_hash(full_obj, full_len, &id);
+
+    *id_out = id;
+
+    // TODO: check if object exists
+    // TODO: write object to disk
 
     free(full_obj);
     return 0;
