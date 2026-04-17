@@ -134,20 +134,36 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
         return -1;
     }
 
-    // Step 1: iterate over index entries
     for (size_t i = 0; i < index->count; i++) {
         const IndexEntry *entry = &index->entries[i];
-
         const char *path = entry->path;
 
-        // TODO: split path into components (directories/files)
-        // TODO: identify if entry belongs to root or subdirectory
+        // Step 1: check if path contains '/'
+        const char *slash = strchr(path, '/');
+
+        if (!slash) {
+            // file in root directory
+            const char *filename = path;
+
+            // TODO: add file entry to root tree
+        } else {
+            // file inside subdirectory
+            size_t dir_len = slash - path;
+
+            char dirname[256];
+            strncpy(dirname, path, dir_len);
+            dirname[dir_len] = '\0';
+
+            const char *remaining = slash + 1;
+
+            // TODO: group entries under dirname
+            // TODO: prepare for subtree creation
+        }
     }
 
-    // TODO: group entries into tree structure
-    // TODO: serialize and write tree
+    // TODO: build tree structures
+    // TODO: serialize and write root tree
 
     (void)tree_id_out;
-
     return 0;
 }
