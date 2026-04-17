@@ -134,12 +134,20 @@ int tree_from_index(const Index *index, ObjectID *tree_id_out) {
         return -1;
     }
 
-    // TODO: iterate over index entries
-    // TODO: group entries by directory structure
-    // TODO: create tree entries (files + subtrees)
-    // TODO: serialize tree and write using object_write
+    // Step 1: iterate over index entries
+    for (size_t i = 0; i < index->count; i++) {
+        const IndexEntry *entry = &index->entries[i];
 
-    (void)tree_id_out;  // suppress unused warning
+        const char *path = entry->path;
+
+        // TODO: split path into components (directories/files)
+        // TODO: identify if entry belongs to root or subdirectory
+    }
+
+    // TODO: group entries into tree structure
+    // TODO: serialize and write tree
+
+    (void)tree_id_out;
 
     return 0;
 }
