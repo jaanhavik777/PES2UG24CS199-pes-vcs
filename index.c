@@ -167,6 +167,29 @@ int index_load(Index *idx) {
 
 int index_save(const Index *idx) {
     if (!idx) return -1;
+
+    FILE *f = fopen(INDEX_FILE ".tmp", "w");
+    if (!f) return -1;
+
+    for (int i = 0; i < idx->count; i++) {
+        const IndexEntry *e = &idx->entries[i];
+
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&e->hash, hex);
+
+        fprintf(f, "%o %s %ld %zu %s\n",
+                e->mode,
+                hex,
+                e->mtime,
+                e->size,
+                e->path);
+    }
+
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+
+    rename(INDEX_FILE ".tmp", INDEX_FILE);
     return 0;
 }
 
